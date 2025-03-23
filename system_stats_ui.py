@@ -6,6 +6,7 @@ from PySide6.QtGui import *
 import pyqtgraph as pg
 import numpy as np
 from datetime import datetime
+import platform
 
 class ThemeColors:
     DARK = {
@@ -181,6 +182,23 @@ class SystemMonitor(QMainWindow):
         theme_layout.addWidget(self.theme_combo)
         theme_layout.addStretch()
         
+        # System Information Panel
+        sys_info_frame = QFrame()
+        sys_info_layout = QVBoxLayout(sys_info_frame)
+        sys_info_layout.setSpacing(5)
+        
+        sys_info_label = QLabel("SYSTEM INFORMATION")
+        sys_info_label.setStyleSheet("font-size: 16px; font-weight: bold;")
+        
+        self.sys_info_table = QTableWidget()
+        self.sys_info_table.setColumnCount(2)
+        self.sys_info_table.setHorizontalHeaderLabels(["Property", "Value"])
+        self.sys_info_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.sys_info_table.setMaximumHeight(150)
+        
+        sys_info_layout.addWidget(sys_info_label)
+        sys_info_layout.addWidget(self.sys_info_table)
+        
         # CPU Usage Display
         cpu_frame = QFrame()
         cpu_layout = QVBoxLayout(cpu_frame)
@@ -253,6 +271,42 @@ class SystemMonitor(QMainWindow):
         mem_layout.addWidget(self.mem_progress)
         mem_layout.addWidget(self.mem_plot)
         
+        # Disk Usage Display
+        disk_frame = QFrame()
+        disk_layout = QVBoxLayout(disk_frame)
+        disk_layout.setSpacing(5)
+        
+        disk_header = QHBoxLayout()
+        self.disk_label = QLabel("DISK USAGE")
+        self.disk_value = QLabel("0%")
+        self.disk_value.setStyleSheet("font-size: 24px; font-weight: bold;")
+        disk_header.addWidget(self.disk_label)
+        disk_header.addWidget(self.disk_value)
+        
+        self.disk_progress = QProgressBar()
+        self.disk_progress.setRange(0, 100)
+        
+        # Disk Graph
+        self.disk_plot = pg.PlotWidget(background=None)
+        self.disk_plot.setMaximumHeight(100)
+        self.disk_plot.setYRange(0, 100)
+        self.disk_plot.showGrid(True, True, alpha=0.3)
+        self.disk_data = np.zeros(30)
+        
+        self.disk_bars = pg.BarGraphItem(
+            x=range(len(self.disk_data)),
+            height=self.disk_data,
+            width=0.8,
+            brush=self.current_theme['graph_memory'],
+            pen=None
+        )
+        self.disk_plot.addItem(self.disk_bars)
+        self.disk_plot.getAxis('bottom').setStyle(showValues=False)
+        
+        disk_layout.addLayout(disk_header)
+        disk_layout.addWidget(self.disk_progress)
+        disk_layout.addWidget(self.disk_plot)
+        
         # Process List
         process_frame = QFrame()
         process_layout = QVBoxLayout(process_frame)
@@ -284,11 +338,16 @@ class SystemMonitor(QMainWindow):
         
         # Add all components to main layout
         layout.addLayout(theme_layout, 0, 0, 1, 2)
-        layout.addWidget(cpu_frame, 1, 0)
-        layout.addWidget(mem_frame, 1, 1)
-        layout.addWidget(process_frame, 2, 0)
-        layout.addWidget(self.control_panel, 2, 1)
-        layout.addWidget(self.alert_panel, 3, 0, 1, 2)
+        layout.addWidget(sys_info_frame, 1, 0)
+        layout.addWidget(cpu_frame, 1, 1)
+        layout.addWidget(mem_frame, 2, 0)
+        layout.addWidget(disk_frame, 2, 1)
+        layout.addWidget(process_frame, 3, 0)
+        layout.addWidget(self.control_panel, 3, 1)
+        layout.addWidget(self.alert_panel, 4, 0, 1, 2)
+        
+        # Update system information
+        self.update_system_info()
         
         # Setup update timer
         self.timer = QTimer()
@@ -296,7 +355,7 @@ class SystemMonitor(QMainWindow):
         self.timer.start(1000)
         
         # Window settings
-        self.setMinimumSize(1200, 800)
+        self.setMinimumSize(1200, 900)
         
     def change_theme(self, theme_name):
         if theme_name == "Dark Theme":
@@ -376,10 +435,12 @@ class SystemMonitor(QMainWindow):
         # Update plot colors
         self.cpu_plot.setBackground(colors['secondary_bg'])
         self.mem_plot.setBackground(colors['secondary_bg'])
+        self.disk_plot.setBackground(colors['secondary_bg'])
         
         # Update bar colors
         self.cpu_bars.setOpts(brush=colors['graph_cpu'])
         self.mem_bars.setOpts(brush=colors['graph_memory'])
+        self.disk_bars.setOpts(brush=colors['graph_memory'])
         
     def update_progress_colors(self):
         # CPU Progress Bar
@@ -427,6 +488,28 @@ class SystemMonitor(QMainWindow):
         except psutil.AccessDenied:
             self.alert_panel.add_alert(f"Access denied to terminate process {pid}", "critical")
         
+    def update_system_info(self):
+        # Get system information
+        info = [
+            ["OS", f"{platform.system()} {platform.release()}"],
+            ["CPU", platform.processor()],
+            ["CPU Cores", str(psutil.cpu_count())],
+            ["Total Memory", f"{psutil.virtual_memory().total / (1024**3):.1f} GB"],
+            ["Boot Time", datetime.fromtimestamp(psutil.boot_time()).strftime("%Y-%m-%d %H:%M:%S")],
+            ["Python Version", platform.python_version()],
+            ["Machine", platform.machine()],
+            ["Node", platform.node()]
+        ]
+        
+        self.sys_info_table.setRowCount(len(info))
+        for i, (key, value) in enumerate(info):
+            key_item = QTableWidgetItem(key)
+            value_item = QTableWidgetItem(value)
+            key_item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+            value_item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+            self.sys_info_table.setItem(i, 0, key_item)
+            self.sys_info_table.setItem(i, 1, value_item)
+        
     def update_stats(self):
         # Update CPU
         cpu_percent = psutil.cpu_percent()
@@ -445,6 +528,15 @@ class SystemMonitor(QMainWindow):
         self.mem_data[-1] = mem_percent
         self.mem_bars.setOpts(height=self.mem_data)
         
+        # Update Disk
+        disk = psutil.disk_usage('/')
+        disk_percent = disk.percent
+        self.disk_value.setText(f"{disk_percent}%")
+        self.disk_progress.setValue(int(disk_percent))
+        self.disk_data = np.roll(self.disk_data, -1)
+        self.disk_data[-1] = disk_percent
+        self.disk_bars.setOpts(height=self.disk_data)
+        
         # Update progress bar colors
         self.update_progress_colors()
         
@@ -455,6 +547,10 @@ class SystemMonitor(QMainWindow):
         # Check Memory threshold
         if mem_percent > self.alert_panel.memory_threshold:
             self.alert_panel.add_alert(f"High Memory usage: {mem_percent}%", "critical")
+        
+        # Check Disk threshold
+        if disk_percent > self.alert_panel.memory_threshold:
+            self.alert_panel.add_alert(f"High Disk usage: {disk_percent}%", "critical")
         
         # Update Process List
         processes = []
