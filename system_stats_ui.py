@@ -18,7 +18,9 @@ class ThemeColors:
         'progress_critical': '#FF4C4C',
         'button_refresh': '#4CAF50',
         'button_kill': '#FF4C4C',
-        'button_settings': '#8A2BE2'
+        'button_settings': '#8A2BE2',
+        'graph_cpu': '#00BFFF',
+        'graph_memory': '#FFD700'
     }
     
     LIGHT = {
@@ -31,7 +33,9 @@ class ThemeColors:
         'progress_critical': '#D32F2F',
         'button_refresh': '#1976D2',
         'button_kill': '#D32F2F',
-        'button_settings': '#673AB7'
+        'button_settings': '#673AB7',
+        'graph_cpu': '#1976D2',
+        'graph_memory': '#FFD700'
     }
     
     CYBERPUNK = {
@@ -44,7 +48,9 @@ class ThemeColors:
         'progress_critical': '#FF3131',
         'button_refresh': '#00FFFF',
         'button_kill': '#FF3131',
-        'button_settings': '#8A2BE2'
+        'button_settings': '#8A2BE2',
+        'graph_cpu': '#FF007F',
+        'graph_memory': '#00FFFF'
     }
 
 class AlertPanel(QFrame):
@@ -190,8 +196,26 @@ class SystemMonitor(QMainWindow):
         self.cpu_progress = QProgressBar()
         self.cpu_progress.setRange(0, 100)
         
+        # CPU Graph
+        self.cpu_plot = pg.PlotWidget(background=None)
+        self.cpu_plot.setMaximumHeight(100)
+        self.cpu_plot.setYRange(0, 100)
+        self.cpu_plot.showGrid(True, True, alpha=0.3)
+        self.cpu_data = np.zeros(30)
+        
+        self.cpu_bars = pg.BarGraphItem(
+            x=range(len(self.cpu_data)),
+            height=self.cpu_data,
+            width=0.8,
+            brush=self.current_theme['graph_cpu'],
+            pen=None
+        )
+        self.cpu_plot.addItem(self.cpu_bars)
+        self.cpu_plot.getAxis('bottom').setStyle(showValues=False)
+        
         cpu_layout.addLayout(cpu_header)
         cpu_layout.addWidget(self.cpu_progress)
+        cpu_layout.addWidget(self.cpu_plot)
         
         # Memory Usage Display
         mem_frame = QFrame()
@@ -208,8 +232,26 @@ class SystemMonitor(QMainWindow):
         self.mem_progress = QProgressBar()
         self.mem_progress.setRange(0, 100)
         
+        # Memory Graph
+        self.mem_plot = pg.PlotWidget(background=None)
+        self.mem_plot.setMaximumHeight(100)
+        self.mem_plot.setYRange(0, 100)
+        self.mem_plot.showGrid(True, True, alpha=0.3)
+        self.mem_data = np.zeros(30)
+        
+        self.mem_bars = pg.BarGraphItem(
+            x=range(len(self.mem_data)),
+            height=self.mem_data,
+            width=0.8,
+            brush=self.current_theme['graph_memory'],
+            pen=None
+        )
+        self.mem_plot.addItem(self.mem_bars)
+        self.mem_plot.getAxis('bottom').setStyle(showValues=False)
+        
         mem_layout.addLayout(mem_header)
         mem_layout.addWidget(self.mem_progress)
+        mem_layout.addWidget(self.mem_plot)
         
         # Process List
         process_frame = QFrame()
@@ -331,6 +373,14 @@ class SystemMonitor(QMainWindow):
         self.alert_panel.apply_theme(colors)
         self.control_panel.apply_theme(colors)
         
+        # Update plot colors
+        self.cpu_plot.setBackground(colors['secondary_bg'])
+        self.mem_plot.setBackground(colors['secondary_bg'])
+        
+        # Update bar colors
+        self.cpu_bars.setOpts(brush=colors['graph_cpu'])
+        self.mem_bars.setOpts(brush=colors['graph_memory'])
+        
     def update_progress_colors(self):
         # CPU Progress Bar
         cpu_value = self.cpu_progress.value()
@@ -382,12 +432,18 @@ class SystemMonitor(QMainWindow):
         cpu_percent = psutil.cpu_percent()
         self.cpu_value.setText(f"{cpu_percent}%")
         self.cpu_progress.setValue(int(cpu_percent))
+        self.cpu_data = np.roll(self.cpu_data, -1)
+        self.cpu_data[-1] = cpu_percent
+        self.cpu_bars.setOpts(height=self.cpu_data)
         
         # Update Memory
         mem = psutil.virtual_memory()
         mem_percent = mem.percent
         self.mem_value.setText(f"{mem_percent}%")
         self.mem_progress.setValue(int(mem_percent))
+        self.mem_data = np.roll(self.mem_data, -1)
+        self.mem_data[-1] = mem_percent
+        self.mem_bars.setOpts(height=self.mem_data)
         
         # Update progress bar colors
         self.update_progress_colors()
