@@ -1,11 +1,13 @@
 import sys
 import psutil
+import datetime
 from PySide6.QtWidgets import *
 from PySide6.QtCore import *
 from PySide6.QtGui import *
 import pyqtgraph as pg
 import numpy as np
 from datetime import datetime
+import platform
 
 class ThemeColors:
     DARK = {
@@ -15,7 +17,12 @@ class ThemeColors:
         'border': '#4A4A4A',
         'progress_normal': '#4CAF50',
         'progress_warning': '#FFA500',
-        'progress_critical': '#FF4C4C'
+        'progress_critical': '#FF4C4C',
+        'graph_cpu': '#00BFFF',
+        'graph_memory': '#FFD700',
+        'button_refresh': '#4CAF50',
+        'button_kill': '#FF4C4C',
+        'button_settings': '#8A2BE2'
     }
     
     LIGHT = {
@@ -25,7 +32,12 @@ class ThemeColors:
         'border': '#BDBDBD',
         'progress_normal': '#008000',
         'progress_warning': '#FF8C00',
-        'progress_critical': '#D32F2F'
+        'progress_critical': '#D32F2F',
+        'graph_cpu': '#1976D2',
+        'graph_memory': '#FFD700',
+        'button_refresh': '#1976D2',
+        'button_kill': '#D32F2F',
+        'button_settings': '#673AB7'
     }
     
     CYBERPUNK = {
@@ -35,13 +47,145 @@ class ThemeColors:
         'border': '#00FFFF',
         'progress_normal': '#39FF14',
         'progress_warning': '#FFBF00',
-        'progress_critical': '#FF3131'
+        'progress_critical': '#FF3131',
+        'graph_cpu': '#FF007F',
+        'graph_memory': '#00FFFF',
+        'button_refresh': '#00FFFF',
+        'button_kill': '#FF3131',
+        'button_settings': '#8A2BE2'
     }
+
+class AlertPanel(QFrame):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setup_ui()
+        
+    def setup_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(5, 5, 5, 5)
+        layout.setSpacing(2)
+        
+        # Alert settings
+        self.cpu_threshold = 80
+        self.memory_threshold = 70
+        
+        # Header with minimize button
+        header_layout = QHBoxLayout()
+        header_label = QLabel("Alerts & Notifications")
+        header_label.setStyleSheet("font-weight: bold;")
+        self.minimize_btn = QPushButton("−")
+        self.minimize_btn.setFixedSize(20, 20)
+        
+        header_layout.addWidget(header_label)
+        header_layout.addWidget(self.minimize_btn)
+        
+        # Alerts list
+        self.alerts_list = QListWidget()
+        self.alerts_list.setMaximumHeight(150)
+        
+        layout.addLayout(header_layout)
+        layout.addWidget(self.alerts_list)
+        
+    def add_alert(self, message, level="warning"):
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        item = QListWidgetItem(f"[{timestamp}] {message}")
+        if level == "critical":
+            item.setForeground(QColor("#FF4C4C"))
+        elif level == "warning":
+            item.setForeground(QColor("#FFA500"))
+        self.alerts_list.insertItem(0, item)
+        if self.alerts_list.count() > 100:
+            self.alerts_list.takeItem(self.alerts_list.count() - 1)
+            
+    def apply_theme(self, colors):
+        self.setStyleSheet(f"""
+            QFrame {{
+                background-color: {colors['secondary_bg']};
+                border: 1px solid {colors['border']};
+                color: {colors['text']};
+            }}
+            QLabel {{
+                color: {colors['text']};
+            }}
+            QPushButton {{
+                background-color: {colors['secondary_bg']};
+                color: {colors['text']};
+                border: 1px solid {colors['border']};
+            }}
+            QListWidget {{
+                background-color: {colors['secondary_bg']};
+                color: {colors['text']};
+                border: 1px solid {colors['border']};
+            }}
+        """)
+
+class ProcessControlPanel(QFrame):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setup_ui()
+        
+    def setup_ui(self):
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(5, 5, 5, 5)
+        layout.setSpacing(10)
+        
+        # Theme selector
+        self.theme_combo = QComboBox()
+        self.theme_combo.addItems(["Dark Theme", "Light Theme", "Cyberpunk Theme"])
+        
+        # Buttons
+        self.refresh_btn = QPushButton("⟳ Refresh")
+        self.kill_btn = QPushButton("⚠ Kill Process")
+        self.settings_btn = QPushButton("⚙ Settings")
+        
+        layout.addWidget(self.theme_combo)
+        layout.addWidget(self.refresh_btn)
+        layout.addWidget(self.kill_btn)
+        layout.addWidget(self.settings_btn)
+        layout.addStretch()
+        
+    def apply_theme(self, colors):
+        button_style = f"""
+            QPushButton {{
+                background-color: {colors['secondary_bg']};
+                color: {colors['text']};
+                border: 1px solid {colors['border']};
+                padding: 5px 15px;
+                border-radius: 5px;
+                min-width: 100px;
+            }}
+            QPushButton:hover {{
+                background-color: {colors['button_settings']};
+            }}
+        """
+        
+        self.refresh_btn.setStyleSheet(button_style.replace(colors['button_settings'], colors['button_refresh']))
+        self.kill_btn.setStyleSheet(button_style.replace(colors['button_settings'], colors['button_kill']))
+        self.settings_btn.setStyleSheet(button_style)
+        
+        self.theme_combo.setStyleSheet(f"""
+            QComboBox {{
+                background-color: {colors['secondary_bg']};
+                color: {colors['text']};
+                border: 1px solid {colors['border']};
+                padding: 5px;
+                border-radius: 5px;
+                min-width: 150px;
+            }}
+            QComboBox::drop-down {{
+                border: none;
+            }}
+            QComboBox::down-arrow {{
+                image: none;
+                border-left: 5px solid {colors['border']};
+                height: 10px;
+            }}
+        """)
 
 class SystemMonitor(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("System Monitor")
+        self.setWindowTitle("Process Visualization Tool")
         self.current_theme = ThemeColors.DARK
         self.setup_ui()
         self.apply_theme(self.current_theme)
@@ -50,18 +194,14 @@ class SystemMonitor(QMainWindow):
         # Create main widget and layout
         main_widget = QWidget()
         self.setCentralWidget(main_widget)
-        layout = QVBoxLayout(main_widget)
+        layout = QGridLayout(main_widget)
         layout.setSpacing(10)
         
-        # Theme selector
-        theme_layout = QHBoxLayout()
-        theme_label = QLabel("Theme:")
-        self.theme_combo = QComboBox()
-        self.theme_combo.addItems(["Dark Theme", "Light Theme", "Cyberpunk Theme"])
-        self.theme_combo.currentTextChanged.connect(self.change_theme)
-        theme_layout.addWidget(theme_label)
-        theme_layout.addWidget(self.theme_combo)
-        theme_layout.addStretch()
+        # Top stats panel (CPU & Memory side by side)
+        top_panel = QFrame()
+        top_layout = QHBoxLayout(top_panel)
+        top_layout.setContentsMargins(10, 10, 10, 10)
+        top_layout.setSpacing(20)
         
         # CPU Usage Display
         cpu_frame = QFrame()
@@ -78,8 +218,25 @@ class SystemMonitor(QMainWindow):
         self.cpu_progress = QProgressBar()
         self.cpu_progress.setRange(0, 100)
         
+        self.cpu_plot = pg.PlotWidget(background=None)
+        self.cpu_plot.setMaximumHeight(100)
+        self.cpu_plot.setYRange(0, 100)
+        self.cpu_plot.showGrid(True, True, alpha=0.3)
+        self.cpu_data = np.zeros(30)
+        
+        self.cpu_bars = pg.BarGraphItem(
+            x=range(len(self.cpu_data)),
+            height=self.cpu_data,
+            width=0.8,
+            brush=self.current_theme['graph_cpu'],
+            pen=None
+        )
+        self.cpu_plot.addItem(self.cpu_bars)
+        self.cpu_plot.getAxis('bottom').setStyle(showValues=False)
+        
         cpu_layout.addLayout(cpu_header)
         cpu_layout.addWidget(self.cpu_progress)
+        cpu_layout.addWidget(self.cpu_plot)
         
         # Memory Usage Display
         mem_frame = QFrame()
@@ -93,33 +250,77 @@ class SystemMonitor(QMainWindow):
         mem_header.addWidget(self.mem_label)
         mem_header.addWidget(self.mem_value)
         
+        self.mem_label_detail = QLabel("Used: 0 GB / Total: 0 GB")
         self.mem_progress = QProgressBar()
         self.mem_progress.setRange(0, 100)
         
+        self.mem_plot = pg.PlotWidget(background=None)
+        self.mem_plot.setMaximumHeight(100)
+        self.mem_plot.setYRange(0, 100)
+        self.mem_plot.showGrid(True, True, alpha=0.3)
+        self.mem_data = np.zeros(30)
+        
+        self.mem_bars = pg.BarGraphItem(
+            x=range(len(self.mem_data)),
+            height=self.mem_data,
+            width=0.8,
+            brush=self.current_theme['graph_memory'],
+            pen=None
+        )
+        self.mem_plot.addItem(self.mem_bars)
+        self.mem_plot.getAxis('bottom').setStyle(showValues=False)
+        
         mem_layout.addLayout(mem_header)
+        mem_layout.addWidget(self.mem_label_detail)
         mem_layout.addWidget(self.mem_progress)
+        mem_layout.addWidget(self.mem_plot)
+        
+        # Add CPU and Memory frames to top panel
+        top_layout.addWidget(cpu_frame, stretch=1)
+        top_layout.addWidget(mem_frame, stretch=1)
         
         # Process List
         process_frame = QFrame()
         process_layout = QVBoxLayout(process_frame)
+        process_layout.setContentsMargins(10, 10, 10, 10)
         
+        # Process header with controls
+        process_header = QHBoxLayout()
         process_label = QLabel("ACTIVE PROCESSES")
         process_label.setStyleSheet("font-size: 16px; font-weight: bold;")
+        self.control_panel = ProcessControlPanel()
+        process_header.addWidget(process_label)
+        process_header.addWidget(self.control_panel)
+        
         self.process_table = QTableWidget()
         self.process_table.setColumnCount(7)
         self.process_table.setHorizontalHeaderLabels([
             "PID", "Name", "CPU %", "Memory %", "Status", "User", "Start Time"
         ])
         self.process_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.process_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.process_table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
         
-        process_layout.addWidget(process_label)
+        process_layout.addLayout(process_header)
         process_layout.addWidget(self.process_table)
         
+        # Right panel for alerts
+        self.alert_panel = AlertPanel()
+        self.alert_panel.setMaximumWidth(300)
+        
+        # Connect signals
+        self.control_panel.refresh_btn.clicked.connect(self.update_stats)
+        self.control_panel.kill_btn.clicked.connect(self.kill_selected_process)
+        self.control_panel.theme_combo.currentTextChanged.connect(self.change_theme)
+        
         # Add all components to main layout
-        layout.addLayout(theme_layout)
-        layout.addWidget(cpu_frame)
-        layout.addWidget(mem_frame)
-        layout.addWidget(process_frame)
+        layout.addWidget(top_panel, 0, 0, 1, 2)
+        layout.addWidget(process_frame, 1, 0, 1, 1)
+        layout.addWidget(self.alert_panel, 1, 1, 1, 1)
+        
+        # Set layout stretch factors
+        layout.setColumnStretch(0, 7)
+        layout.setColumnStretch(1, 3)
         
         # Setup update timer
         self.timer = QTimer()
@@ -127,7 +328,7 @@ class SystemMonitor(QMainWindow):
         self.timer.start(1000)
         
         # Window settings
-        self.setMinimumSize(800, 600)
+        self.setMinimumSize(1200, 800)
         
     def change_theme(self, theme_name):
         if theme_name == "Dark Theme":
@@ -179,26 +380,22 @@ class SystemMonitor(QMainWindow):
                 background-color: {colors['progress_normal']};
                 border-radius: 5px;
             }}
-            QComboBox {{
-                background-color: {colors['secondary_bg']};
-                color: {colors['text']};
-                border: 1px solid {colors['border']};
-                padding: 5px;
-                border-radius: 5px;
-                min-width: 150px;
-            }}
-            QComboBox::drop-down {{
-                border: none;
-            }}
-            QComboBox::down-arrow {{
-                image: none;
-                border-left: 5px solid {colors['border']};
-                height: 10px;
-            }}
         """)
+        
+        # Update plot colors
+        self.cpu_plot.setBackground(colors['secondary_bg'])
+        self.mem_plot.setBackground(colors['secondary_bg'])
+        
+        # Update bar colors using setOpts
+        self.cpu_bars.setOpts(brush=colors['graph_cpu'])
+        self.mem_bars.setOpts(brush=colors['graph_memory'])
         
         # Update progress bar colors based on usage
         self.update_progress_colors()
+        
+        # Apply theme to panels
+        self.alert_panel.apply_theme(colors)
+        self.control_panel.apply_theme(colors)
         
     def update_progress_colors(self):
         # CPU Progress Bar
@@ -231,20 +428,53 @@ class SystemMonitor(QMainWindow):
             }}
         """)
         
+    def kill_selected_process(self):
+        selected_items = self.process_table.selectedItems()
+        if not selected_items:
+            return
+            
+        row = selected_items[0].row()
+        pid = int(self.process_table.item(row, 0).text())
+        try:
+            psutil.Process(pid).terminate()
+            self.alert_panel.add_alert(f"Process {pid} terminated", "warning")
+        except psutil.NoSuchProcess:
+            self.alert_panel.add_alert(f"Process {pid} not found", "critical")
+        except psutil.AccessDenied:
+            self.alert_panel.add_alert(f"Access denied to terminate process {pid}", "critical")
+        
     def update_stats(self):
         # Update CPU
         cpu_percent = psutil.cpu_percent()
         self.cpu_value.setText(f"{cpu_percent}%")
         self.cpu_progress.setValue(int(cpu_percent))
+        self.cpu_data = np.roll(self.cpu_data, -1)
+        self.cpu_data[-1] = cpu_percent
+        self.cpu_bars.setOpts(height=self.cpu_data)
+        
+        # Update progress bar colors
+        self.update_progress_colors()
+        
+        # Check CPU threshold
+        if cpu_percent > self.alert_panel.cpu_threshold:
+            self.alert_panel.add_alert(f"High CPU usage: {cpu_percent}%", "critical")
         
         # Update Memory
         mem = psutil.virtual_memory()
         mem_percent = mem.percent
-        self.mem_value.setText(f"{mem_percent}%")
-        self.mem_progress.setValue(int(mem_percent))
+        used_gb = mem.used / (1024 ** 3)
+        total_gb = mem.total / (1024 ** 3)
         
-        # Update progress bar colors
-        self.update_progress_colors()
+        self.mem_value.setText(f"{mem_percent}%")
+        self.mem_label_detail.setText(f"Used: {used_gb:.1f} GB / Total: {total_gb:.1f} GB")
+        self.mem_progress.setValue(int(mem_percent))
+        self.mem_data = np.roll(self.mem_data, -1)
+        self.mem_data[-1] = mem_percent
+        self.mem_bars.setOpts(height=self.mem_data)
+        
+        # Check Memory threshold
+        if mem_percent > self.alert_panel.memory_threshold:
+            self.alert_panel.add_alert(f"High Memory usage: {mem_percent}%", "critical")
         
         # Update Process List
         processes = []
