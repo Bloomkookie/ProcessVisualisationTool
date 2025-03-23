@@ -7,6 +7,7 @@ import pyqtgraph as pg
 import numpy as np
 from datetime import datetime
 import platform
+import time
 
 class ThemeColors:
     DARK = {
@@ -21,7 +22,9 @@ class ThemeColors:
         'button_kill': '#FF4C4C',
         'button_settings': '#8A2BE2',
         'graph_cpu': '#00BFFF',
-        'graph_memory': '#FFD700'
+        'graph_memory': '#FFD700',
+        'graph_network': '#FF69B4',
+        'graph_temperature': '#FF4500'
     }
     
     LIGHT = {
@@ -36,7 +39,9 @@ class ThemeColors:
         'button_kill': '#D32F2F',
         'button_settings': '#673AB7',
         'graph_cpu': '#1976D2',
-        'graph_memory': '#FFD700'
+        'graph_memory': '#FFD700',
+        'graph_network': '#E91E63',
+        'graph_temperature': '#F44336'
     }
     
     CYBERPUNK = {
@@ -51,7 +56,9 @@ class ThemeColors:
         'button_kill': '#FF3131',
         'button_settings': '#8A2BE2',
         'graph_cpu': '#FF007F',
-        'graph_memory': '#00FFFF'
+        'graph_memory': '#00FFFF',
+        'graph_network': '#FF00FF',
+        'graph_temperature': '#FF1493'
     }
 
 class AlertPanel(QFrame):
@@ -164,6 +171,8 @@ class SystemMonitor(QMainWindow):
         self.current_theme = ThemeColors.DARK
         self.setup_ui()
         self.apply_theme(self.current_theme)
+        self.last_net_io = psutil.net_io_counters()
+        self.last_net_time = time.time()
         
     def setup_ui(self):
         # Create main widget and layout
@@ -307,6 +316,78 @@ class SystemMonitor(QMainWindow):
         disk_layout.addWidget(self.disk_progress)
         disk_layout.addWidget(self.disk_plot)
         
+        # Network Usage Display
+        network_frame = QFrame()
+        network_layout = QVBoxLayout(network_frame)
+        network_layout.setSpacing(5)
+        
+        network_header = QHBoxLayout()
+        self.network_label = QLabel("NETWORK USAGE")
+        self.network_value = QLabel("0 MB/s")
+        self.network_value.setStyleSheet("font-size: 24px; font-weight: bold;")
+        network_header.addWidget(self.network_label)
+        network_header.addWidget(self.network_value)
+        
+        self.network_progress = QProgressBar()
+        self.network_progress.setRange(0, 100)
+        
+        # Network Graph
+        self.network_plot = pg.PlotWidget(background=None)
+        self.network_plot.setMaximumHeight(100)
+        self.network_plot.setYRange(0, 100)
+        self.network_plot.showGrid(True, True, alpha=0.3)
+        self.network_data = np.zeros(30)
+        
+        self.network_bars = pg.BarGraphItem(
+            x=range(len(self.network_data)),
+            height=self.network_data,
+            width=0.8,
+            brush=self.current_theme['graph_network'],
+            pen=None
+        )
+        self.network_plot.addItem(self.network_bars)
+        self.network_plot.getAxis('bottom').setStyle(showValues=False)
+        
+        network_layout.addLayout(network_header)
+        network_layout.addWidget(self.network_progress)
+        network_layout.addWidget(self.network_plot)
+        
+        # Temperature Display
+        temp_frame = QFrame()
+        temp_layout = QVBoxLayout(temp_frame)
+        temp_layout.setSpacing(5)
+        
+        temp_header = QHBoxLayout()
+        self.temp_label = QLabel("CPU TEMPERATURE")
+        self.temp_value = QLabel("0°C")
+        self.temp_value.setStyleSheet("font-size: 24px; font-weight: bold;")
+        temp_header.addWidget(self.temp_label)
+        temp_header.addWidget(self.temp_value)
+        
+        self.temp_progress = QProgressBar()
+        self.temp_progress.setRange(0, 100)
+        
+        # Temperature Graph
+        self.temp_plot = pg.PlotWidget(background=None)
+        self.temp_plot.setMaximumHeight(100)
+        self.temp_plot.setYRange(0, 100)
+        self.temp_plot.showGrid(True, True, alpha=0.3)
+        self.temp_data = np.zeros(30)
+        
+        self.temp_bars = pg.BarGraphItem(
+            x=range(len(self.temp_data)),
+            height=self.temp_data,
+            width=0.8,
+            brush=self.current_theme['graph_temperature'],
+            pen=None
+        )
+        self.temp_plot.addItem(self.temp_bars)
+        self.temp_plot.getAxis('bottom').setStyle(showValues=False)
+        
+        temp_layout.addLayout(temp_header)
+        temp_layout.addWidget(self.temp_progress)
+        temp_layout.addWidget(self.temp_plot)
+        
         # Process List
         process_frame = QFrame()
         process_layout = QVBoxLayout(process_frame)
@@ -342,9 +423,11 @@ class SystemMonitor(QMainWindow):
         layout.addWidget(cpu_frame, 1, 1)
         layout.addWidget(mem_frame, 2, 0)
         layout.addWidget(disk_frame, 2, 1)
-        layout.addWidget(process_frame, 3, 0)
-        layout.addWidget(self.control_panel, 3, 1)
-        layout.addWidget(self.alert_panel, 4, 0, 1, 2)
+        layout.addWidget(network_frame, 3, 0)
+        layout.addWidget(temp_frame, 3, 1)
+        layout.addWidget(process_frame, 4, 0)
+        layout.addWidget(self.control_panel, 4, 1)
+        layout.addWidget(self.alert_panel, 5, 0, 1, 2)
         
         # Update system information
         self.update_system_info()
@@ -355,7 +438,7 @@ class SystemMonitor(QMainWindow):
         self.timer.start(1000)
         
         # Window settings
-        self.setMinimumSize(1200, 900)
+        self.setMinimumSize(1200, 1000)
         
     def change_theme(self, theme_name):
         if theme_name == "Dark Theme":
@@ -436,11 +519,15 @@ class SystemMonitor(QMainWindow):
         self.cpu_plot.setBackground(colors['secondary_bg'])
         self.mem_plot.setBackground(colors['secondary_bg'])
         self.disk_plot.setBackground(colors['secondary_bg'])
+        self.network_plot.setBackground(colors['secondary_bg'])
+        self.temp_plot.setBackground(colors['secondary_bg'])
         
         # Update bar colors
         self.cpu_bars.setOpts(brush=colors['graph_cpu'])
         self.mem_bars.setOpts(brush=colors['graph_memory'])
         self.disk_bars.setOpts(brush=colors['graph_memory'])
+        self.network_bars.setOpts(brush=colors['graph_network'])
+        self.temp_bars.setOpts(brush=colors['graph_temperature'])
         
     def update_progress_colors(self):
         # CPU Progress Bar
@@ -536,6 +623,52 @@ class SystemMonitor(QMainWindow):
         self.disk_data = np.roll(self.disk_data, -1)
         self.disk_data[-1] = disk_percent
         self.disk_bars.setOpts(height=self.disk_data)
+        
+        # Update Network
+        current_net_io = psutil.net_io_counters()
+        current_time = time.time()
+        time_diff = current_time - self.last_net_time
+        
+        if time_diff > 0:
+            bytes_sent = current_net_io.bytes_sent - self.last_net_io.bytes_sent
+            bytes_recv = current_net_io.bytes_recv - self.last_net_io.bytes_recv
+            total_bytes = bytes_sent + bytes_recv
+            mb_per_sec = total_bytes / (1024 * 1024 * time_diff)
+            
+            self.network_value.setText(f"{mb_per_sec:.1f} MB/s")
+            self.network_progress.setValue(min(int(mb_per_sec * 10), 100))
+            
+            self.network_data = np.roll(self.network_data, -1)
+            self.network_data[-1] = min(mb_per_sec * 10, 100)
+            self.network_bars.setOpts(height=self.network_data)
+            
+            if mb_per_sec > 10:  # Alert if network usage is high
+                self.alert_panel.add_alert(f"High Network usage: {mb_per_sec:.1f} MB/s", "warning")
+        
+        self.last_net_io = current_net_io
+        self.last_net_time = current_time
+        
+        # Update Temperature
+        try:
+            temps = psutil.sensors_temperatures()
+            if temps:
+                # Get the first available temperature sensor
+                for name, entries in temps.items():
+                    if entries:
+                        temp = entries[0].current
+                        self.temp_value.setText(f"{temp:.1f}°C")
+                        self.temp_progress.setValue(min(int(temp), 100))
+                        
+                        self.temp_data = np.roll(self.temp_data, -1)
+                        self.temp_data[-1] = min(temp, 100)
+                        self.temp_bars.setOpts(height=self.temp_data)
+                        
+                        if temp > 80:  # Alert if temperature is high
+                            self.alert_panel.add_alert(f"High CPU Temperature: {temp:.1f}°C", "critical")
+                        break
+        except:
+            self.temp_value.setText("N/A")
+            self.temp_progress.setValue(0)
         
         # Update progress bar colors
         self.update_progress_colors()
